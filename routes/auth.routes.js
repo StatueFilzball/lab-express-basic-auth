@@ -5,6 +5,9 @@ const saltRounds = 10;
 
 const User = require('../models/User.model');
 
+const { isLoggedIn, isLoggedOut} = require('../middleware/route-guard');
+
+
 router.get('/signup', (req, res) => {
     res.render('auth/signup')
 })
@@ -36,33 +39,63 @@ router.get('/profile/:username', (req, res) => {
 // Login
 
 router.get('/login', (req, res)=>{
+    console.log('SESSION =====> ', req.session);
     res.render('auth/login')
 })
 
 router.post('/login', (req, res) => {
-    console.log(req.body)
-
-    const { email, password } = req.body;
+    console.log('SESSION =====> ', req.session);
+    const { username, password } = req.body;
     
-    User.findOne({ email })
-        .then(foundUser => {
-            // Compare the user input with my hash password
-              return bcrypt.compare(password, foundUser.password)
-                    .then(result => {
-                        // if result === true -> redirect to the profile route
-                        if(result){
-                            res.redirect(`/auth/profile/${foundUser.username}`)
-                        }
-                        // else -> communicate to the user that they entered something wrong
-                        else {
-                            res.render('auth/login', { errorMessage: 'Incorrect password, try again' })
-                        }
-                })
+    if (username === "" || password === "") {
+        res.render("auth/login", {
+            errorMessage: "Please enter both email and password to login."
         })
-        .catch(err => console.log(err))
+        return
+    }
 
+
+    User.findOne({ username })
+        .then(foundUser => {
+            console.log("User", foundUser)
+            if (!foundUser){
+                res.render("auth/login", {errorMessage: "Username cant be found. Think hard and try again"})
+                return
+            } else if (bcrypt.compare(password, foundUser.password)) {
+                const {username, password} = foundUser
+                req.session.currentUser = {username}
+                res.redirect(`/auth/profile/${username}`)
+            } else {
+                res.render("auth/login", {errorMessage: "Incorrect passwort"})
+            }
+})
+.catch(err => console.log(err))
 })
 
+// main route
+router.get("/main", isLoggedIn, (req, res) => {
+        console.log('currentUser:', req.session.currentUser);
+
+    const { currentUser } = req.session;
+    currentUser.loggedIn = true;
+    res.render("auth/main")
+  })
+
+// private route
+router.get("/private", isLoggedIn, (req, res) => {
+    console.log('currentUser:', req.session.currentUser);
+
+const { currentUser } = req.session;
+currentUser.loggedIn = true;
+res.render("auth/private")
+})
+
+router.post('/logout', isLoggedIn, (req, res) => {
+    req.session.destroy(err => {
+      if (err) console.log(err);
+      res.redirect('/');
+    });
+  });
 
 module.exports = router;
 
